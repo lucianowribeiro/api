@@ -1,0 +1,24 @@
+services:
+  db:
+    image: mysql
+    container_name: database
+    ports:
+      - 3306:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=shopper
+    restart: always
+    
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: node
+    ports:
+      - 3000:3000
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - db
+    volumes:
+      - ./src:/app/src
