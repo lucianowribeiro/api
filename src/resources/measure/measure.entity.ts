@@ -4,15 +4,16 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   ManyToOne,
+  JoinColumn,
 } from 'typeorm';
-import { Customer } from './customer.entity';
+import { Customer } from '../customer/customer.entity';
 
 enum MeasureTypes {
   WATER = 'WATER',
   GAS = 'GAS',
 }
 
-@Entity()
+@Entity('measure')
 export class Measure {
   @PrimaryGeneratedColumn('uuid')
   measure_uuid: string;

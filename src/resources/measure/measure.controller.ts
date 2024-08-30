@@ -2,40 +2,63 @@ import {
   Controller,
   Post,
   Body,
-  UseInterceptors,
-  UploadedFile,
-  BadRequestException,
+  Patch,
+  Get,
+  Param,
+  Query,
+  Response,
 } from '@nestjs/common';
 import { MeasureService } from './measure.service';
-import { MeasureUploadPayloadDto } from './dto/measure_upload_payload.dto';
-import { DoubleReportException } from '../../config/exceptions/double_report.exception';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { Express } from 'express';
-import { isBase64 } from 'class-validator';
-import { readFileSync } from 'fs';
-import { InvalidDataException } from '../../config/exceptions/invalid_data.exception';
+import { MeasureUploadDto } from './dto/measure-upload.dto';
+import { MeasureConfirmDto } from './dto/measure-confirm.dto';
+import { MeasureListDto } from './dto/measure-list.dto';
+import { NotFoundMeasureException } from 'src/config/exceptions/not-found-measure.exception';
+import { Customer } from '../customer/customer.entity';
 
-@Controller('/measure')
+@Controller()
 export class MeasureController {
   constructor(private readonly measureService: MeasureService) {}
 
   @Post('/upload')
-  @UseInterceptors(FileInterceptor('image'))
-  async uploadMeasure(
-    @UploadedFile() image: Express.Multer.File,
-    @Body() payload: MeasureUploadPayloadDto,
-  ) {
-    if (!isBase64(Buffer.from(image.buffer).toString('base64')))
-      throw new InvalidDataException('image is not base64 encoding format');
+  async uploadMeasure(@Body() payload: MeasureUploadDto) {
+    this.measureService.isUniqueByMonthAndType(payload);
+    /*  const { measure_value } =
+      await this.measureService.measureImageByGoogleGenerativeAI(payload.image); */
 
-    if (!this.measureService.getMeasurebyMonthAndType(payload)) {
-      throw new DoubleReportException();
+    const measure = await this.measureService.save({
+      ...payload,
+      image_url: '/images',
+    });
+    return {
+      measure_value: '',
+      measure_url: measure.image_url,
+      measure_uuid: measure.measure_uuid,
+    };
+  }
+
+  @Patch('/confirm')
+  async confirmMeasure(@Body() payload: MeasureConfirmDto) {
+    const foundMeasure = await this.measureService.findUuid(
+      payload.measure_uuid,
+    );
+    if (!foundMeasure) throw new NotFoundMeasureException('MEASURE_NOT_FOUND');
+
+    const confirmation = await this.measureService.findConfirmation();
+
+    this.measureService.updateConfirmation(confirmation.measure_uuid);
+    return {
+      sucess: true,
+    };
+  }
+
+  @Get('/:customer_code/list')
+  async listAllMeasuresByCustomer(
+    @Param('customer_code') customer_code: MeasureListDto['customer_code'],
+    @Query('measure_type') measure_type: MeasureListDto['measure_type'],
+  ): Promise<Customer> {
+    if (measure_type) {
+      return this.measureService.filterByType({ customer_code, measure_type });
     }
-
-    const measure_value = await this.measureService.measureImagetoLLM(image);
-
-    // return this.measureService.save({ ...payload, image_url, measure_value });
-
-    return image;
+    return await this.measureService.findAllByCustomer({ customer_code });
   }
 }

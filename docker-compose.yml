@@ -7,7 +7,10 @@ services:
     environment:
       - MYSQL_ROOT_PASSWORD=root
       - MYSQL_DATABASE=app
-    
+    networks:
+      net:
+        ipv4_address: 10.5.0.5
+
   api:
     build:
       context: .
@@ -21,3 +24,14 @@ services:
       - ./src:/app/src
     depends_on:
       - db
+    networks:
+      net:
+        ipv4_address: 10.5.0.6
+
+networks:
+  net:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 10.5.0.0/16
+         gateway: 10.5.0.1
