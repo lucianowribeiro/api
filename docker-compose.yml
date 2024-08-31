@@ -6,19 +6,32 @@ services:
       - 3306:3306
     environment:
       - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_DATABASE=shopper
-    restart: always
-    
+      - MYSQL_DATABASE=app
+    networks:
+      net:
+        ipv4_address: 10.5.0.5
+
   api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: node
+    container_name: api
     ports:
       - 3000:3000
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-    depends_on:
-      - db
     volumes:
       - ./src:/app/src
+    depends_on:
+      - db
+    networks:
+      net:
+        ipv4_address: 10.5.0.6
+
+networks:
+  net:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 10.5.0.0/16
+         gateway: 10.5.0.1
