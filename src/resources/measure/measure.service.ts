@@ -6,7 +6,7 @@ import {
 import { MeasureUploadDto } from './dto/measure-upload.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Measure } from './measure.entity';
-import { InsertResult, Repository } from 'typeorm';
+import { Between, In, InsertResult, Repository } from 'typeorm';
 import { DuplicateInformation } from 'src/config/exceptions/duplicate-information.exception';
 import { MeasureListDto } from './dto/measure-list.dto';
 import { NotFoundMeasureException } from 'src/config/exceptions/not-found-measure.exception';
@@ -47,27 +47,43 @@ export class MeasureService {
     return { format: mimeType.split('/')[1], mimeType, base64Data };
   }
 
-  async isUniqueByMonthAndType(payload: MeasureUploadDto) {
-    const result = await this.measureRepository
-      .createQueryBuilder('measure')
-      .where('MONTH(measure.measure_datetime) = :month', {
-        month: new Date(payload.measure_datetime).getMonth(),
-      })
-      .andWhere('YEAR(measure.measure_datetime) = :year', {
-        year: new Date(payload.measure_datetime).getFullYear(),
-      })
-      .andWhere('YEAR(measure.measure_type) = :type', {
-        type: payload.measure_type,
-      })
-      .getOne();
+  async findByMonthAndType({
+    customer_code,
+    measure_datetime,
+    measure_type,
+  }: {
+    customer_code: MeasureUploadDto['customer_code'];
+    measure_type: MeasureUploadDto['measure_type'];
+    measure_datetime: MeasureUploadDto['measure_datetime'];
+  }) {
+    const result = await this.customerRepository.findOne({
+      where: {
+        customer_code,
+        measures: {
+          measure_type,
+          measure_datetime: Between(
+            new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1),
+            new Date(measure_datetime),
+          ),
+        },
+      },
+      relations: {
+        measures: true,
+      },
+    });
 
     if (result) {
       throw new DuplicateInformation('DOUBLE_REPORT');
     }
+
     return;
   }
 
-  async measureImageByGoogleGenerativeAI(image: MeasureUploadDto['image']) {
+  async measureImageByGoogleGenerativeAI({
+    image,
+  }: {
+    image: MeasureUploadDto['image'];
+  }) {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
       model: 'gemini-1.5-pro-latest',
@@ -92,90 +108,103 @@ export class MeasureService {
     }
 
     return {
-      measure_value: result.response.text().match('/d+'),
+      measure_value: result.response.text(),
     };
   }
 
-  async save({
-    image,
+  async saveUpload({
     customer_code,
     measure_datetime,
     measure_type,
     image_url,
   }: {
-    image: string;
     customer_code: string;
     measure_datetime: Date;
     measure_type: 'WATER' | 'GAS';
     image_url: string;
   }): Promise<Measure> {
-    const payload = {
-      image,
-      customer_code,
-      measure_datetime,
-      measure_type,
-      image_url,
-    };
-    const customer = this.customerRepository.create(payload);
-    this.customerRepository.save(customer);
+    const measure = await this.measureRepository.save(
+      this.measureRepository.create({
+        measure_datetime,
+        measure_type,
+        image_url,
+      }),
+    );
 
-    const measure = this.measureRepository.create(payload);
-    return await this.measureRepository.save(measure);
+    await this.customerRepository.save(
+      this.customerRepository.create({ customer_code, measures: [measure] }),
+    );
+
+    return measure;
   }
 
-  async findUuid(
-    measure_uuid: MeasureConfirmDto['measure_uuid'],
-  ): Promise<Measure> {
-    return this.measureRepository.findOneBy({ measure_uuid });
+  async findUuid({
+    measure_uuid,
+  }: {
+    measure_uuid: MeasureConfirmDto['measure_uuid'];
+  }): Promise<Measure> {
+    return await this.measureRepository.findOneBy({ measure_uuid });
   }
 
-  async findConfirmation() {
-    const result = this.measureRepository.findOneBy({ has_confirmed: false });
+  async findConfirmation(payload: MeasureConfirmDto) {
+    const result = await this.measureRepository.findOneBy({
+      measure_uuid: payload.measure_uuid,
+      has_confirmed: Boolean(payload.confirmed_value),
+    });
 
-    if (!result) throw new DuplicateInformation('CONFIRMATION_DUPLICATE');
+    if (result) throw new DuplicateInformation('CONFIRMATION_DUPLICATE');
 
-    return result;
+    return;
   }
 
-  updateConfirmation(measure_uuid: Measure['measure_uuid']) {
-    this.measureRepository.update(
-      { measure_uuid },
+  async saveConfirmation(payload: MeasureConfirmDto) {
+    await this.measureRepository.update(
       {
-        has_confirmed: true,
+        measure_uuid: payload.measure_uuid,
+      },
+      {
+        has_confirmed: Boolean(payload.confirmed_value),
       },
     );
   }
 
-  async filterByType({ customer_code, measure_type }: MeasureListDto) {
-    const result = await this.customerRepository
-      .createQueryBuilder('customer')
-      .leftJoinAndSelect(
-        'customer.measures',
-        'measure',
-        'measure.measure_type = :measure_type',
-        {
+  async filterByType({
+    measure_type,
+    customer_code,
+  }: MeasureListDto): Promise<Customer[]> {
+    const result = await this.customerRepository.find({
+      where: {
+        customer_code,
+        measures: {
           measure_type,
         },
-      )
-      .where('customer.customer_code = :customer_code', { customer_code })
-      .getOne();
+      },
+      relations: {
+        measures: true,
+      },
+    });
 
-    if (!result) throw new NotFoundMeasureException('MEASURES_NOT_FOUND');
+    if (result.length <= 0)
+      throw new NotFoundMeasureException('MEASURES_NOT_FOUND');
     return result;
   }
 
   async findAllByCustomer({
     customer_code,
   }: {
-    customer_code: MeasureListDto['customer_code'];
-  }): Promise<Customer> {
-    const result = await this.customerRepository
-      .createQueryBuilder('customer')
-      .leftJoinAndSelect('customer.measures', 'measure')
-      .where('customer.customer_code = :customer_code', { customer_code })
-      .getOne();
+    customer_code: Customer['customer_code'];
+  }): Promise<Customer[]> {
+    const result = await this.customerRepository.find({
+      where: {
+        customer_code,
+      },
+      relations: {
+        measures: true,
+      },
+    });
 
-    if (!result) throw new NotFoundMeasureException('MEASURES_NOT_FOUND');
+    if (result.length <= 0)
+      throw new NotFoundMeasureException('MEASURES_NOT_FOUND');
 
     return result;
   }

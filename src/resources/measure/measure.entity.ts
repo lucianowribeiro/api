@@ -30,6 +30,10 @@ export class Measure {
   @Column()
   image_url: string;
 
-  @ManyToOne(() => Customer, (customer) => customer.measures)
+  @ManyToOne(() => Customer, (customer) => customer.customer_code)
+  @JoinColumn({
+    name: 'customer_code',
+    referencedColumnName: 'customer_code',
+  })
   customer: Customer;
 }
