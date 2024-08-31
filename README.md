@@ -1,14 +1,15 @@
-# Leitor de medidas(WATER - GAS)
+# Leitor de consumo(WATER - GAS)
 
-Leitor de medidas para teste de vaga de desenvolvedor fullstack jr
+Um leitor de consumo de agua e gas,integrando,com extração de dados atraves de IA.
 
 
-## Tecnologies
+## Technologies
  - Typescript
  - NodeJS
  - NestJS
  - MYSQL
  - Swagger
+ - Vision(Google Gemini AI)
 
 ## To run
 `
