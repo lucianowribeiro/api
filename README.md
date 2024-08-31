@@ -1,12 +1,14 @@
 # Leitor de consumo(WATER - GAS)
 
-Um leitor de consumo de agua e gas,integrando,com extração de dados atraves de IA.
+Um leitor de consumo de agua e gas,com extração de dados atraves de IA.
 
 
 ## Technologies
  - Typescript
  - NodeJS
  - NestJS
+ - Typeorm
+ - Class-validator
  - MYSQL
  - Swagger
  - Vision(Google Gemini AI)
