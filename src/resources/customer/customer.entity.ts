@@ -12,7 +12,7 @@ export class Customer {
   @PrimaryGeneratedColumn('uuid')
   customer_uuid: string;
 
-  @Column({ unique: true })
+  @Column()
   customer_code: string;
 
   @OneToMany(() => Measure, (measure) => measure.customer)

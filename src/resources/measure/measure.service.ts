@@ -92,88 +92,75 @@ export class MeasureService {
     }
 
     return {
-      measure_value: result.response.text().match('/d+'),
+      measure_value: result.response.text(),
     };
   }
 
-  async save({
-    image,
+  async saveUpload({
     customer_code,
     measure_datetime,
     measure_type,
     image_url,
   }: {
-    image: string;
     customer_code: string;
     measure_datetime: Date;
     measure_type: 'WATER' | 'GAS';
     image_url: string;
   }): Promise<Measure> {
-    const payload = {
-      image,
-      customer_code,
+    const customer = this.customerRepository.create({ customer_code });
+    this.customerRepository.save(customer);
+
+    const measure = this.measureRepository.create({
       measure_datetime,
       measure_type,
       image_url,
-    };
-    const customer = this.customerRepository.create(payload);
-    this.customerRepository.save(customer);
-
-    const measure = this.measureRepository.create(payload);
+    });
     return await this.measureRepository.save(measure);
   }
 
   async findUuid(
     measure_uuid: MeasureConfirmDto['measure_uuid'],
   ): Promise<Measure> {
-    return this.measureRepository.findOneBy({ measure_uuid });
+    return await this.measureRepository.findOneBy({ measure_uuid });
   }
 
-  async findConfirmation() {
-    const result = this.measureRepository.findOneBy({ has_confirmed: false });
+  async findConfirmation(payload: MeasureConfirmDto) {
+    const result = await this.measureRepository.findOneBy({
+      measure_uuid: payload.measure_uuid,
+      has_confirmed: Boolean(payload.confirmed_value),
+    });
 
-    if (!result) throw new DuplicateInformation('CONFIRMATION_DUPLICATE');
+    if (result) throw new DuplicateInformation('CONFIRMATION_DUPLICATE');
 
-    return result;
+    return;
   }
 
-  updateConfirmation(measure_uuid: Measure['measure_uuid']) {
-    this.measureRepository.update(
-      { measure_uuid },
+  async saveConfirmation(payload: MeasureConfirmDto) {
+    await this.measureRepository.update(
       {
-        has_confirmed: true,
+        measure_uuid: payload.measure_uuid,
+      },
+      {
+        has_confirmed: Boolean(payload.confirmed_value),
       },
     );
   }
 
-  async filterByType({ customer_code, measure_type }: MeasureListDto) {
-    const result = await this.customerRepository
-      .createQueryBuilder('customer')
-      .leftJoinAndSelect(
-        'customer.measures',
-        'measure',
-        'measure.measure_type = :measure_type',
-        {
-          measure_type,
-        },
-      )
-      .where('customer.customer_code = :customer_code', { customer_code })
-      .getOne();
+  async filterByType(
+    measure_type: MeasureListDto['measure_type'],
+  ): Promise<Measure[]> {
+    const result = await this.measureRepository.find({
+      where: {
+        measure_type,
+      },
+    });
 
     if (!result) throw new NotFoundMeasureException('MEASURES_NOT_FOUND');
     return result;
   }
 
-  async findAllByCustomer({
-    customer_code,
-  }: {
-    customer_code: MeasureListDto['customer_code'];
-  }): Promise<Customer> {
-    const result = await this.customerRepository
-      .createQueryBuilder('customer')
-      .leftJoinAndSelect('customer.measures', 'measure')
-      .where('customer.customer_code = :customer_code', { customer_code })
-      .getOne();
+  async findAllByCustomer(): Promise<Measure[]> {
+    const result = await this.measureRepository.find();
 
     if (!result) throw new NotFoundMeasureException('MEASURES_NOT_FOUND');
 

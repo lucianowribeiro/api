@@ -8,6 +8,7 @@ Leitor de medidas para teste de vaga de desenvolvedor fullstack jr
  - NodeJS
  - NestJS
  - MYSQL
+ - Swagger
 
 ## To run
 `

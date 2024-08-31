@@ -14,6 +14,8 @@ import { MeasureConfirmDto } from './dto/measure-confirm.dto';
 import { MeasureListDto } from './dto/measure-list.dto';
 import { NotFoundMeasureException } from 'src/config/exceptions/not-found-measure.exception';
 import { Customer } from '../customer/customer.entity';
+import { randomUUID } from 'crypto';
+import { Measure } from './measure.entity';
 
 @Controller()
 export class MeasureController {
@@ -22,15 +24,17 @@ export class MeasureController {
   @Post('/upload')
   async uploadMeasure(@Body() payload: MeasureUploadDto) {
     this.measureService.isUniqueByMonthAndType(payload);
-    /*  const { measure_value } =
-      await this.measureService.measureImageByGoogleGenerativeAI(payload.image); */
+    const { measure_value } =
+      await this.measureService.measureImageByGoogleGenerativeAI(payload.image);
 
-    const measure = await this.measureService.save({
-      ...payload,
+    const measure = await this.measureService.saveUpload({
+      customer_code: payload.customer_code,
+      measure_datetime: payload.measure_datetime,
+      measure_type: payload.measure_type,
       image_url: '/images',
     });
     return {
-      measure_value: '',
+      measure_value,
       measure_url: measure.image_url,
       measure_uuid: measure.measure_uuid,
     };
@@ -43,9 +47,10 @@ export class MeasureController {
     );
     if (!foundMeasure) throw new NotFoundMeasureException('MEASURE_NOT_FOUND');
 
-    const confirmation = await this.measureService.findConfirmation();
+    await this.measureService.findConfirmation(payload);
 
-    this.measureService.updateConfirmation(confirmation.measure_uuid);
+    this.measureService.saveConfirmation(payload);
+
     return {
       sucess: true,
     };
@@ -55,10 +60,10 @@ export class MeasureController {
   async listAllMeasuresByCustomer(
     @Param('customer_code') customer_code: MeasureListDto['customer_code'],
     @Query('measure_type') measure_type: MeasureListDto['measure_type'],
-  ): Promise<Customer> {
+  ): Promise<Measure[]> {
     if (measure_type) {
-      return this.measureService.filterByType({ customer_code, measure_type });
+      return this.measureService.filterByType(measure_type);
     }
-    return await this.measureService.findAllByCustomer({ customer_code });
+    return await this.measureService.findAllByCustomer();
   }
 }
